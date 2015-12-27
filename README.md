@@ -1,7 +1,7 @@
 SparkErl
 ========
 
-An Erlang implementation of the [Spark protocol](https://github.com/spark/spark-protocol).
+An Erlang implementation of the [Spark protocol](https://github.com/spark/spark-protocol) (eventually).
 
 
 
