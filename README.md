@@ -9,5 +9,5 @@ Generating your keys
 ====================
 
     openssl genrsa -out server-key.pem 2048
-    openssl rsa -in server-key.pem -pubout > server-key.pem.pub
+    openssl rsa -in server-key.pem -pubout > server-key.pub.pem
 
