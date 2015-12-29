@@ -5,9 +5,9 @@
 -export([stop/1]).
 
 start(_Type, _Args) ->
-    {ok, _} = ranch:start_listener(tcp_echo, 100,
+    {ok, _} = ranch:start_listener(spark_protocol, 100,
     	ranch_tcp, [{port, 5683}],
-    	sparkerl_spark_protocol, []
+    	sparkerl_spark_protocol_fsm, []
     ),
 	{ok, Pid} = sparkerl_sup:start_link(),
     {ok, Pid}.

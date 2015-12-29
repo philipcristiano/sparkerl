@@ -12,3 +12,4 @@ rel/example_project
 # Keys
 /*.pem
 /*.der
+.erlang.mk/deps.log
