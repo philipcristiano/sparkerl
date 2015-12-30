@@ -18,7 +18,8 @@
          terminate/3,
          code_change/4]).
 
--export([handshake/2]).
+-export([validate_nonce/2,
+         validate_hello/2]).
 
 -record(state, {socket, transport, private_key, nonce}).
 
@@ -79,7 +80,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
                    private_key=PK,
                    nonce=Nonce},
 
-    gen_fsm:enter_loop(?MODULE, [], handshake, State).
+    gen_fsm:enter_loop(?MODULE, [], validate_nonce, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -96,19 +97,43 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handshake({tcp, Data}, State=#state{private_key=PK, nonce=Nonce}) ->
-    lager:debug("Cipher Data ~p", [Data]),
+validate_nonce({tcp, Data}, State=#state{private_key=PK, nonce=Nonce, socket=Socket, transport=Transport}) ->
     Plain = public_key:decrypt_private(Data, PK),
-    lager:info("Plain Data: ~p", [Plain]),
-    lager:info("Stored Nonce: ~p", [Nonce]),
 
-    <<Nonce:40/binary, ID:12/binary, Rest/binary>> = Plain,
+    <<Nonce:40/binary, ID:96, Rest/binary>> = Plain,
     lager:info("SMT ID: ~p", [ID]),
 
-    {next_state, handshake, State};
-handshake(Event, State) ->
+    ClientPemFile = erlang:integer_to_list(ID) ++ ".pub.pem",
+    ClientPemPath = "keys/" ++ ClientPemFile,
+    {ok, ClientPem} = file:read_file(ClientPemPath),
+    [PemEntries] = public_key:pem_decode(ClientPem),
+    ClientPubKey = public_key:pem_entry_decode(PemEntries),
+
+    Msg = create_session_msg(PK, ClientPubKey),
+    Transport:send(Socket, Msg),
+    ok = Transport:setopts(Socket, [{active, once}]),
+
+    {next_state, validate_hello, State};
+
+validate_nonce(Event, State) ->
     lager:info("Unknown Event ~p", [Event]),
-    {next_state, handshake, State}.
+    {next_state, validate_nonce, State}.
+
+create_session_msg(PrivKey, PubKey) ->
+    SessionKey = crypto:strong_rand_bytes(40),
+    <<Key:16/binary, IV:16/binary, Salt:8/binary>> = SessionKey,
+    CipherText = public_key:encrypt_public(SessionKey, PubKey),
+    HMAC = crypto:hmac(sha, CipherText, SessionKey),
+    % HMAC = hmac:hmac256(SessionKey, CipherText),
+    % HMACDigest = hmac:hexlify(HMAC),
+    lager:info("HMAC: ~p", [HMAC]),
+    SignedHMAC = public_key:sign(HMAC, sha256, PrivKey),
+
+    [CipherText, SignedHMAC].
+
+validate_hello(Event, State) ->
+    lager:info("Hello Event ~p", [Event]),
+    {next_state, validate_hello, State}.
 
 state_name(_Event, State) ->
     {next_state, state_name, State}.
