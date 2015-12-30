@@ -20,7 +20,7 @@
 
 -export([handshake/2]).
 
--record(state, {socket, transport}).
+-record(state, {socket, transport, private_key, nonce}).
 
 %%%===================================================================
 %%% API
@@ -64,14 +64,22 @@ init(Ref, Socket, Transport, _Opts = []) ->
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
+    PKF = application:get_env(sparkerl, private_key, "default-key.pem"),
+    {ok, Pem} = file:read_file(PKF),
+    [PemEntries] = public_key:pem_decode(Pem),
+    PK = public_key:pem_entry_decode(PemEntries),
     lager:info("Received Connection"),
-    State = #state{socket=Socket, transport=Transport},
 
     Nonce = crypto:rand_bytes(40),
     Transport:send(Socket, Nonce),
     lager:info("Sending nonce: ~p", [Nonce]),
 
-    gen_fsm:enter_loop(?MODULE, [], handshake, {State}).
+    State = #state{socket=Socket,
+                   transport=Transport,
+                   private_key=PK,
+                   nonce=Nonce},
+
+    gen_fsm:enter_loop(?MODULE, [], handshake, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -88,8 +96,15 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handshake({tcp, Data}, State) ->
-    lager:info("Data ~p", [Data]),
+handshake({tcp, Data}, State=#state{private_key=PK, nonce=Nonce}) ->
+    lager:debug("Cipher Data ~p", [Data]),
+    Plain = public_key:decrypt_private(Data, PK),
+    lager:info("Plain Data: ~p", [Plain]),
+    lager:info("Stored Nonce: ~p", [Nonce]),
+
+    <<Nonce:40/binary, ID:12/binary, Rest/binary>> = Plain,
+    lager:info("SMT ID: ~p", [ID]),
+
     {next_state, handshake, State};
 handshake(Event, State) ->
     lager:info("Unknown Event ~p", [Event]),
