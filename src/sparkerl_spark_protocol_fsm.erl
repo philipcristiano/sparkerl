@@ -120,15 +120,24 @@ validate_nonce(Event, State) ->
     {next_state, validate_nonce, State}.
 
 create_session_msg(PrivKey, PubKey) ->
+    % Server generates 40 bytes of secure random data to serve as components
+    % of a session key for AES-128-CBC encryption. The first 16 bytes (MSB
+    % first) will be the key, the next 16 bytes (MSB first) will be the
+    % initialization vector (IV), and the final 8 bytes (MSB first) will be
+    % the salt. Server RSA encrypts this 40-byte message using the Core's
+    % public key to create a 128-byte ciphertext.
     SessionKey = crypto:strong_rand_bytes(40),
     <<Key:16/binary, IV:16/binary, Salt:8/binary>> = SessionKey,
-    CipherText = public_key:encrypt_public(SessionKey, PubKey),
-    HMAC = crypto:hmac(sha, CipherText, SessionKey),
-    % HMAC = hmac:hmac256(SessionKey, CipherText),
-    % HMACDigest = hmac:hexlify(HMAC),
-    lager:info("HMAC: ~p", [HMAC]),
-    SignedHMAC = public_key:sign(HMAC, sha256, PrivKey),
+    <<CipherText:128/binary>> = public_key:encrypt_public(SessionKey, PubKey),
+    % Server creates a 20-byte HMAC of the ciphertext using SHA1 and the 40
+    % bytes generated in the previous step as the HMAC key.
+    HMAC = crypto:hmac(sha, SessionKey, CipherText, 20),
 
+    % Server signs the HMAC with its RSA private key generating a 256-byte
+    % signature.
+    SignedHMAC = public_key:encrypt_private(HMAC, PrivKey),
+
+    % Server sends 384 bytes to Core: the ciphertext then the signature.
     [CipherText, SignedHMAC].
 
 validate_hello(Event, State) ->
