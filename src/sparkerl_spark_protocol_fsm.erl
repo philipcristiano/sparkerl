@@ -21,7 +21,14 @@
 -export([validate_nonce/2,
          validate_hello/2]).
 
--record(state, {socket, transport, private_key, nonce}).
+-record(state, {socket,
+                transport,
+                private_key,
+                nonce,
+                outgoing_iv,
+                incoming_iv,
+                aes_key,
+                aes_salt}).
 
 %%%===================================================================
 %%% API
@@ -109,17 +116,17 @@ validate_nonce({tcp, Data}, State=#state{private_key=PK, nonce=Nonce, socket=Soc
     [PemEntries] = public_key:pem_decode(ClientPem),
     ClientPubKey = public_key:pem_entry_decode(PemEntries),
 
-    Msg = create_session_msg(PK, ClientPubKey),
+    {NewState, Msg} = create_session_msg(PK, ClientPubKey, State),
     Transport:send(Socket, Msg),
     ok = Transport:setopts(Socket, [{active, once}]),
 
-    {next_state, validate_hello, State};
+    {next_state, validate_hello, NewState};
 
 validate_nonce(Event, State) ->
     lager:info("Unknown Event ~p", [Event]),
     {next_state, validate_nonce, State}.
 
-create_session_msg(PrivKey, PubKey) ->
+create_session_msg(PrivKey, PubKey, State) ->
     % Server generates 40 bytes of secure random data to serve as components
     % of a session key for AES-128-CBC encryption. The first 16 bytes (MSB
     % first) will be the key, the next 16 bytes (MSB first) will be the
@@ -129,6 +136,10 @@ create_session_msg(PrivKey, PubKey) ->
     SessionKey = crypto:strong_rand_bytes(40),
     <<Key:16/binary, IV:16/binary, Salt:8/binary>> = SessionKey,
     <<CipherText:128/binary>> = public_key:encrypt_public(SessionKey, PubKey),
+    NewState = State#state{outgoing_iv=IV,
+                           incoming_iv=IV,
+                           aes_key=Key,
+                           aes_salt=Salt},
     % Server creates a 20-byte HMAC of the ciphertext using SHA1 and the 40
     % bytes generated in the previous step as the HMAC key.
     HMAC = crypto:hmac(sha, SessionKey, CipherText, 20),
@@ -138,14 +149,28 @@ create_session_msg(PrivKey, PubKey) ->
     SignedHMAC = public_key:encrypt_private(HMAC, PrivKey),
 
     % Server sends 384 bytes to Core: the ciphertext then the signature.
-    [CipherText, SignedHMAC].
+    {NewState, [CipherText, SignedHMAC]}.
+
+validate_hello({tcp, Data}, State) ->
+    lager:info("Hello event ~p", [Data]),
+    << Something:2/binary, CipherText:16/binary>> = Data,
+    lager:info("Hello ciphertext ~p", [CipherText]),
+    {ok, PlainText, NewState} = decrypt_aes(CipherText, State),
+    lager:info("Hello plaintext ~p", [PlainText]),
+    lager:info("Hello coap ~p", [coap_message_parser:decode(PlainText)]),
+    {next_state, validate_hello, State};
 
 validate_hello(Event, State) ->
-    lager:info("Hello Event ~p", [Event]),
+    lager:info("Unhandled Hello Event ~p", [Event]),
     {next_state, validate_hello, State}.
 
 state_name(_Event, State) ->
     {next_state, state_name, State}.
+decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
+    lager:info("Keys! ~p", [{Key, IV}]),
+    PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
+    NewState=#state{incoming_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
+    {ok, PlainBin, NewState}.
 
 %%--------------------------------------------------------------------
 %% @private
