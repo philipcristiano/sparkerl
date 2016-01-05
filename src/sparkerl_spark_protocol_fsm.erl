@@ -10,7 +10,6 @@
 %% gen_fsm callbacks
 -export([init/1,
          init/4,
-         state_name/2,
          state_name/3,
          handle_event/3,
          handle_sync_event/4,
@@ -164,8 +163,6 @@ validate_hello(Event, State) ->
     lager:info("Unhandled Hello Event ~p", [Event]),
     {next_state, validate_hello, State}.
 
-state_name(_Event, State) ->
-    {next_state, state_name, State}.
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
     lager:info("Keys! ~p", [{Key, IV}]),
     PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
