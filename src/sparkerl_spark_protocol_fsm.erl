@@ -181,7 +181,8 @@ decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
 
 encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
     lager:info("Encrypting ~p", [PlainBin]),
-    PaddedBin = pad(16, PlainBin),
+    PaddedBin = PlainBin, % pad(16, PlainBin),
+    lager:info("Sending coap ~p", [coap_message_parser:decode(PaddedBin)]),
     lager:info("padded to ~p", [PaddedBin]),
 
     EncryptedBin = crypto:block_encrypt(aes_cbc256, Key, IV, PaddedBin),
@@ -193,10 +194,12 @@ pad(Size, Bin) ->
     <<Bin/binary, 0:((Size-Pad)*8)>>.
 
 create_hello_bin(State) ->
-    Id = random:uniform(4294967296),
+    Id = random:uniform(65536),
+    Padding = <<0,6,0,2,0,0,0,6,1>>,
     Hello = #coap_message{type=non,
                           method='post',
                           id=Id,
+                          payload= <<0,6,0,2,0,0,0,6,1>>,
                           options=[{uri_path,[<<"h">>]}]},
     lager:info("Outgoing Hello ~p", [Hello]),
     Bin = coap_message_parser:encode(Hello),
