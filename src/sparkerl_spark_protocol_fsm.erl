@@ -4,6 +4,8 @@
 -behaviour(ranch_protocol).
 -compile([{parse_transform, lager_transform}]).
 
+-include_lib("gen_coap/include/coap.hrl").
+
 %% API
 -export([start_link/4]).
 
@@ -26,6 +28,7 @@
                 nonce,
                 outgoing_iv,
                 incoming_iv,
+                outgoing_id,
                 aes_key,
                 aes_salt}).
 
@@ -150,14 +153,21 @@ create_session_msg(PrivKey, PubKey, State) ->
     % Server sends 384 bytes to Core: the ciphertext then the signature.
     {NewState, [CipherText, SignedHMAC]}.
 
-validate_hello({tcp, Data}, State) ->
+validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     lager:info("Hello event ~p", [Data]),
     << Something:2/binary, CipherText:16/binary>> = Data,
     lager:info("Hello ciphertext ~p", [CipherText]),
     {ok, PlainText, NewState} = decrypt_aes(CipherText, State),
     lager:info("Hello plaintext ~p", [PlainText]),
     lager:info("Hello coap ~p", [coap_message_parser:decode(PlainText)]),
-    {next_state, validate_hello, State};
+
+    {ok, HelloBin, NewState1} = create_hello_bin(NewState),
+    {ok, OutgoingCipher, NewState2} = encrypt_aes(HelloBin, NewState1),
+    lager:info("Responding with Hello"),
+    Transport:send(Socket, OutgoingCipher),
+    ok = Transport:setopts(Socket, [{active, once}]),
+
+    {next_state, communicating, State};
 
 validate_hello(Event, State) ->
     lager:info("Unhandled Hello Event ~p", [Event]),
@@ -166,8 +176,37 @@ validate_hello(Event, State) ->
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
     lager:info("Keys! ~p", [{Key, IV}]),
     PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
-    NewState=#state{incoming_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
+    NewState=State#state{incoming_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
     {ok, PlainBin, NewState}.
+
+encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
+    lager:info("Encrypting ~p", [PlainBin]),
+    PaddedBin = pad(16, PlainBin),
+    lager:info("padded to ~p", [PaddedBin]),
+
+    EncryptedBin = crypto:block_encrypt(aes_cbc256, Key, IV, PaddedBin),
+    NewState=State#state{outgoing_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
+    {ok, EncryptedBin, NewState}.
+
+pad(Size, Bin) ->
+    Pad = size(Bin) rem Size,
+    <<Bin/binary, 0:((Size-Pad)*8)>>.
+
+create_hello_bin(State) ->
+    Id = random:uniform(4294967296),
+    Hello = #coap_message{type=non,
+                          method='post',
+                          id=Id,
+                          options=[{uri_path,[<<"h">>]}]},
+    lager:info("Outgoing Hello ~p", [Hello]),
+    Bin = coap_message_parser:encode(Hello),
+    NewState = State#state{outgoing_id=Id},
+    {ok, Bin, NewState}.
+
+
+communicating(Event, State) ->
+    lager:info("Unhandled Communicating Event ~p", [Event]),
+    {next_state, communicating, State}.
 
 %%--------------------------------------------------------------------
 %% @private
