@@ -186,17 +186,12 @@ decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
 
 encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
     lager:info("Encrypting ~p", [PlainBin]),
-    PaddedBin = PlainBin, % pad(16, PlainBin),
-    lager:info("Sending coap ~p", [coap_message_parser:decode(PaddedBin)]),
+    PaddedBin = pkcs7:pad(PlainBin),
     lager:info("padded to ~p", [PaddedBin]),
 
     EncryptedBin = crypto:block_encrypt(aes_cbc256, Key, IV, PaddedBin),
     NewState=State#state{outgoing_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
     {ok, EncryptedBin, NewState}.
-
-pad(Size, Bin) ->
-    Pad = size(Bin) rem Size,
-    <<Bin/binary, 0:((Size-Pad)*8)>>.
 
 create_hello_bin(State) ->
     Id = random:uniform(65536),
