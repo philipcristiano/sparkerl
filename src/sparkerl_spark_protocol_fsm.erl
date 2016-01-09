@@ -161,7 +161,9 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     lager:info("Hello ciphertext ~p", [CipherText]),
     {ok, PlainText, NewState} = decrypt_aes(CipherText, State),
     lager:info("Hello plaintext ~p", [PlainText]),
-    lager:info("Hello coap ~p", [coap_message_parser:decode(PlainText)]),
+    Hello = coap_message_parser:decode(PlainText),
+    lager:info("Hello coap ~p", [Hello]),
+    parse_hello_payload(Hello#coap_message.payload),
 
     {ok, HelloBin, NewState1} = create_hello_bin(NewState),
     lager:info("Responding with Hello"),
@@ -172,6 +174,15 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
 validate_hello(Event, State) ->
     lager:info("Unhandled Hello Event ~p", [Event]),
     {next_state, validate_hello, State}.
+
+parse_hello_payload(<<ProductId:16, FirmwareVersion:16, Flags:8, NewlyUpgraded:8, PlatformId:16, Rest/binary>>) ->
+    lager:info("ProductId ~p", [ProductId]),
+    lager:info("FirmwareVersion ~p", [FirmwareVersion]),
+    lager:info("Flags ~p", [Flags]),
+    lager:info("NewlyUpgraded ~p", [NewlyUpgraded]),
+    lager:info("PlatformId ~p", [PlatformId]),
+
+    ok.
 
 send(Data, State=#state{socket=Socket, transport=Transport}) ->
     {ok, OutgoingCipher, NewState} = encrypt_aes(Data, State),
