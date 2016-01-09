@@ -25,6 +25,7 @@
 
 -record(state, {socket,
                 transport,
+                recv_buffer= <<>>,
                 private_key,
                 nonce,
                 outgoing_iv,
@@ -207,8 +208,7 @@ create_hello_bin(State) ->
     {ok, Bin, NewState}.
 
 
-communicating({tcp, <<Size:16, Data:Size/binary>>}, State) ->
-    lager:info("Need data of size ~p", [Size]),
+communicating({tcp, Data}, State) ->
     lager:info("Have data of size ~p", [erlang:byte_size(Data)]),
     lager:info("Processing Data ~p", [Data]),
     {ok, PlainText, NewState} = decrypt_aes(Data, State),
@@ -290,12 +290,28 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({tcp, Port, IncommingData}, communicating, State=#state{recv_buffer=Buffer}) ->
+    ToProcess = <<Buffer/binary, IncommingData/binary>>,
+    LeftoverBuffer = c_parse_chunk(ToProcess),
+    lager:info("Recv buffer size ~p", [byte_size(LeftoverBuffer)]),
+    NewState = State#state{recv_buffer=LeftoverBuffer},
+
+    {next_state, communicating, NewState};
+
 handle_info({tcp, Port, Data}, StateName, State) ->
     ok = gen_fsm:send_event(self(), {tcp, Data}),
     {next_state, StateName, State};
+
 handle_info(Info, StateName, State) ->
     lager:info("Info ~p", [Info]),
     {next_state, StateName, State}.
+
+c_parse_chunk(<<Size:16, Data:Size/binary, Rest/binary>>) ->
+    lager:info("Sending ciphoer data of size ~p to fsm", [Size]),
+    ok = gen_fsm:send_event(self(), {tcp, Data}),
+    Rest;
+c_parse_chunk(Rest) ->
+    Rest.
 
 %%--------------------------------------------------------------------
 %% @private
