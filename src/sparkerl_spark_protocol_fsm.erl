@@ -318,8 +318,8 @@ handle_info(Info, StateName, State) ->
     {next_state, StateName, State}.
 
 c_parse_chunk(<<Size:16, Data:Size/binary, Rest/binary>>) ->
-    lager:info("Sending ciphoer data of size ~p to fsm", [Size]),
     ok = gen_fsm:send_event(self(), {tcp, Data}),
+    lager:info("Sending cipher data of size ~p to fsm", [Size]),
     Rest;
 c_parse_chunk(Rest) ->
     Rest.
