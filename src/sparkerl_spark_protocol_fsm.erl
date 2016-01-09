@@ -212,7 +212,9 @@ create_hello_bin(State) ->
     {ok, Bin, NewState}.
 
 
-communicating({tcp, <<Size:16, Data/binary>>}, State) ->
+communicating({tcp, <<Size:16, Data:Size/binary>>}, State) ->
+    lager:info("Need data of size ~p", [Size]),
+    lager:info("Have data of size ~p", [erlang:byte_size(Data)]),
     lager:info("Processing Data ~p", [Data]),
     {ok, PlainText, NewState} = decrypt_aes(Data, State),
     lager:info("Received coap ~p", [coap_message_parser:decode(PlainText)]),
