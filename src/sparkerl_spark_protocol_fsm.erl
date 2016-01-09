@@ -208,6 +208,12 @@ create_hello_bin(State) ->
     {ok, Bin, NewState}.
 
 
+communicating({tcp, <<Size:16, Data/binary>>}, State) ->
+    lager:info("Processing Data ~p", [Data]),
+    {ok, PlainText, NewState} = decrypt_aes(Data, State),
+    lager:info("Received coap ~p", [coap_message_parser:decode(PlainText)]),
+    {next_state, communicating, State};
+
 communicating(Event, State) ->
     lager:info("Unhandled Communicating Event ~p", [Event]),
     {next_state, communicating, State}.
