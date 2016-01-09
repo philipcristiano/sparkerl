@@ -163,17 +163,21 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     lager:info("Hello coap ~p", [coap_message_parser:decode(PlainText)]),
 
     {ok, HelloBin, NewState1} = create_hello_bin(NewState),
-    {ok, OutgoingCipher, NewState2} = encrypt_aes(HelloBin, NewState1),
     lager:info("Responding with Hello"),
-    Size = erlang:byte_size(OutgoingCipher),
-    Transport:send(Socket, [<< Size:16>>, OutgoingCipher]),
-    ok = Transport:setopts(Socket, [{active, once}]),
+    {ok, NewState2} = send(HelloBin, NewState1),
 
     {next_state, communicating, State};
 
 validate_hello(Event, State) ->
     lager:info("Unhandled Hello Event ~p", [Event]),
     {next_state, validate_hello, State}.
+
+send(Data, State=#state{socket=Socket, transport=Transport}) ->
+    {ok, OutgoingCipher, NewState} = encrypt_aes(Data, State),
+    Size = erlang:byte_size(OutgoingCipher),
+    Transport:send(Socket, [<< Size:16>>, OutgoingCipher]),
+    ok = Transport:setopts(Socket, [{active, once}]),
+    {ok, NewState}.
 
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
     PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
