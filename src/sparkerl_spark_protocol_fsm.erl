@@ -165,7 +165,8 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     {ok, HelloBin, NewState1} = create_hello_bin(NewState),
     {ok, OutgoingCipher, NewState2} = encrypt_aes(HelloBin, NewState1),
     lager:info("Responding with Hello"),
-    Transport:send(Socket, OutgoingCipher),
+    Size = erlang:byte_size(OutgoingCipher),
+    Transport:send(Socket, [<< Size:16>>, OutgoingCipher]),
     ok = Transport:setopts(Socket, [{active, once}]),
 
     {next_state, communicating, State};
