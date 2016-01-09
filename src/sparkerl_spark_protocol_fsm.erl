@@ -176,7 +176,6 @@ validate_hello(Event, State) ->
     {next_state, validate_hello, State}.
 
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
-    lager:info("Keys! ~p", [{Key, IV}]),
     PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
     NewState=State#state{incoming_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
     {ok, PlainBin, NewState}.
