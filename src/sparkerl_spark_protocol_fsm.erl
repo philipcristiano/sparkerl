@@ -19,7 +19,8 @@
          terminate/3,
          code_change/4]).
 
--export([validate_nonce/2,
+-export([communicating/2,
+         validate_nonce/2,
          validate_hello/2]).
 
 -record(state, {socket,
