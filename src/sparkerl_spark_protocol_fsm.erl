@@ -196,11 +196,11 @@ encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
 
 create_hello_bin(State) ->
     Id = random:uniform(65536),
-    Padding = <<0,6,0,2,0,0,0,6,1>>,
+    Padding = <<>>,
     Hello = #coap_message{type=non,
                           method='post',
                           id=Id,
-                          payload= <<0,6,0,2,0,0,0,6,1>>,
+                          payload=Padding,
                           options=[{uri_path,[<<"h">>]}]},
     lager:info("Outgoing Hello ~p", [Hello]),
     Bin = coap_message_parser:encode(Hello),
