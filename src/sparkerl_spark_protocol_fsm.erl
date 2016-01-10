@@ -169,7 +169,7 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     lager:info("Responding with Hello"),
     {ok, NewState2} = send(HelloBin, NewState1),
 
-    {next_state, communicating, State};
+    {next_state, communicating, NewState1};
 
 validate_hello(Event, State) ->
     lager:info("Unhandled Hello Event ~p", [Event]),
