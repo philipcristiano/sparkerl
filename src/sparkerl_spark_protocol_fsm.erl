@@ -301,11 +301,12 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({tcp, Port, IncommingData}, communicating, State=#state{recv_buffer=Buffer}) ->
+handle_info({tcp, Port, IncommingData}, communicating, State=#state{recv_buffer=Buffer, transport=Transport, socket=Socket}) ->
     ToProcess = <<Buffer/binary, IncommingData/binary>>,
     LeftoverBuffer = c_parse_chunk(ToProcess),
     lager:info("Recv buffer size ~p", [byte_size(LeftoverBuffer)]),
     NewState = State#state{recv_buffer=LeftoverBuffer},
+    ok = Transport:setopts(Socket, [{active, once}]),
 
     {next_state, communicating, NewState};
 
