@@ -224,7 +224,7 @@ communicating({tcp, Data}, State) ->
     lager:info("Processing Data ~p", [Data]),
     {ok, PlainText, NewState} = decrypt_aes(Data, State),
     lager:info("Received coap ~p", [coap_message_parser:decode(PlainText)]),
-    {next_state, communicating, State};
+    {next_state, communicating, NewState};
 
 communicating(Event, State) ->
     lager:info("Unhandled Communicating Event ~p", [Event]),
