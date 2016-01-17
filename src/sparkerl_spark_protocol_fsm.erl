@@ -194,9 +194,13 @@ send(Data, State=#state{socket=Socket, transport=Transport}) ->
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
     lager:info("Decrypting with IV ~p", [IV]),
     PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
-    NewState=State#state{incoming_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
     lager:info("Next decrypt with IV ~p", [NewState#state.incoming_iv]),
-    {ok, PlainBin, NewState}.
+    NewState=State#state{incoming_iv=next_iv(EncryptedBin)},
+    UnpaddedBin = pkcs7:unpad(PlainBin),
+    {ok, UnpaddedBin, NewState}.
+
+next_iv(<<First16Bytes:16/binary, _Rest/binary>>) ->
+    First16Bytes.
 
 encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
     lager:info("Encrypting ~p", [PlainBin]),
