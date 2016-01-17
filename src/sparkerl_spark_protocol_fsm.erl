@@ -156,11 +156,11 @@ create_session_msg(PrivKey, PubKey, State) ->
     {NewState, [CipherText, SignedHMAC]}.
 
 validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
-    lager:info("Hello event ~p", [Data]),
+    lager:debug("Hello event ~p", [Data]),
     << Something:2/binary, CipherText:16/binary>> = Data,
-    lager:info("Hello ciphertext ~p", [CipherText]),
+    lager:debug("Hello ciphertext ~p", [CipherText]),
     {ok, PlainText, NewState} = decrypt_aes(CipherText, State),
-    lager:info("Hello plaintext ~p", [PlainText]),
+    lager:debug("Hello plaintext ~p", [PlainText]),
     Hello = coap_message_parser:decode(PlainText),
     lager:info("Hello coap ~p", [Hello]),
     parse_hello_payload(Hello#coap_message.payload),
@@ -192,10 +192,11 @@ send(Data, State=#state{socket=Socket, transport=Transport}) ->
     {ok, NewState}.
 
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
-    lager:info("Decrypting with IV ~p", [IV]),
+    lager:debug("Decrypting ~p", [EncryptedBin]),
+    lager:debug("Decrypting with IV ~p", [IV]),
     PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
-    lager:info("Next decrypt with IV ~p", [NewState#state.incoming_iv]),
     NewState=State#state{incoming_iv=next_iv(EncryptedBin)},
+    lager:debug("Next decrypt with IV ~p", [NewState#state.incoming_iv]),
     UnpaddedBin = pkcs7:unpad(PlainBin),
     {ok, UnpaddedBin, NewState}.
 
@@ -203,9 +204,9 @@ next_iv(<<First16Bytes:16/binary, _Rest/binary>>) ->
     First16Bytes.
 
 encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
-    lager:info("Encrypting ~p", [PlainBin]),
+    lager:debug("Encrypting ~p", [PlainBin]),
     PaddedBin = pkcs7:pad(PlainBin),
-    lager:info("padded to ~p", [PaddedBin]),
+    lager:debug("padded to ~p", [PaddedBin]),
 
     EncryptedBin = crypto:block_encrypt(aes_cbc256, Key, IV, PaddedBin),
     NewState=State#state{outgoing_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
@@ -226,10 +227,12 @@ create_hello_bin(State) ->
 
 
 communicating({tcp, Data}, State) ->
-    lager:info("Have data of size ~p", [erlang:byte_size(Data)]),
-    lager:info("Processing Data ~p", [Data]),
+    lager:debug("Have data of size ~p", [erlang:byte_size(Data)]),
+    lager:debug("Processing Data ~p", [Data]),
     {ok, PlainText, NewState} = decrypt_aes(Data, State),
-    lager:info("Received coap ~p", [coap_message_parser:decode(PlainText)]),
+    lager:debug("Plain text: ~p", [PlainText]),
+    Msg = coap_message_parser:decode(PlainText),
+    lager:info("Received coap ~p", [Msg]),
     {next_state, communicating, NewState};
 
 communicating(Event, State) ->
@@ -308,9 +311,10 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({tcp, Port, IncommingData}, communicating, State=#state{recv_buffer=Buffer, transport=Transport, socket=Socket}) ->
+    lager:debug("Received packet!"),
     ToProcess = <<Buffer/binary, IncommingData/binary>>,
     LeftoverBuffer = c_parse_chunk(ToProcess),
-    lager:info("Recv buffer size ~p", [byte_size(LeftoverBuffer)]),
+    lager:debug("Recv buffer size ~p", [byte_size(LeftoverBuffer)]),
     NewState = State#state{recv_buffer=LeftoverBuffer},
     ok = Transport:setopts(Socket, [{active, once}]),
 
@@ -326,9 +330,11 @@ handle_info(Info, StateName, State) ->
 
 c_parse_chunk(<<Size:16, Data:Size/binary, Rest/binary>>) ->
     ok = gen_fsm:send_event(self(), {tcp, Data}),
-    lager:info("Sending cipher data of size ~p to fsm", [Size]),
+    lager:debug("Sending cipher data of size ~p to fsm", [Size]),
+    lager:debug("Data is ~p bytes long", [byte_size(Data)]),
     Rest;
 c_parse_chunk(Rest) ->
+    lager:debug("No size match :("),
     Rest.
 
 %%--------------------------------------------------------------------
