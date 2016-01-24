@@ -232,12 +232,22 @@ communicating({tcp, Data}, State) ->
     {ok, PlainText, NewState} = decrypt_aes(Data, State),
     lager:debug("Plain text: ~p", [PlainText]),
     Msg = coap_message_parser:decode(PlainText),
+    NewState2 = handle_coap(Msg, NewState),
     lager:info("Received coap ~p", [Msg]),
-    {next_state, communicating, NewState};
+    {next_state, communicating, NewState2};
 
 communicating(Event, State) ->
     lager:info("Unhandled Communicating Event ~p", [Event]),
     {next_state, communicating, State}.
+
+handle_coap(Msg=#coap_message{options=[{uri_path,[<<"t">>]}]}, State) ->
+    lager:info("Client is asking for the time, ~p", [Msg]),
+    State;
+
+handle_coap(Msg, State) ->
+    lager:info("Unhandled coap message ~p", [Msg]),
+    State.
+
 
 %%--------------------------------------------------------------------
 %% @private
