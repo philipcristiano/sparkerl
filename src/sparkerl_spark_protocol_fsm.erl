@@ -116,6 +116,7 @@ validate_nonce({tcp, Data}, State=#state{private_key=PK, nonce=Nonce, socket=Soc
 
     ClientPemFile = erlang:integer_to_list(ID) ++ ".pub.pem",
     ClientPemPath = "keys/" ++ ClientPemFile,
+    lager:debug("Trying to find pem file ~p~n", [ClientPemPath]),
     {ok, ClientPem} = file:read_file(ClientPemPath),
     [PemEntries] = public_key:pem_decode(ClientPem),
     ClientPubKey = public_key:pem_entry_decode(PemEntries),
