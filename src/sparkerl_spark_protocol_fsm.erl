@@ -166,9 +166,8 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     lager:info("Hello coap ~p", [Hello]),
     parse_hello_payload(Hello#coap_message.payload),
 
-    {ok, HelloBin, NewState1} = create_hello_bin(NewState),
     lager:info("Responding with Hello"),
-    {ok, NewState2} = send(HelloBin, NewState1),
+    {ok, NewState1} = send_hello_bin(NewState),
 
     {next_state, communicating, NewState1};
 
@@ -182,8 +181,16 @@ parse_hello_payload(<<ProductId:16, FirmwareVersion:16, Flags:8, NewlyUpgraded:8
     lager:info("Flags ~p", [Flags]),
     lager:info("NewlyUpgraded ~p", [NewlyUpgraded]),
     lager:info("PlatformId ~p", [PlatformId]),
-
     ok.
+
+send_coap(Msg=#coap_message{}, State=#state{outgoing_id=OutgoingId}) ->
+    NewId = OutgoingId + 1,
+    MsgWithId = Msg#coap_message{id=NewId},
+    StateWithId = State#state{outgoing_id=OutgoingId},
+    lager:info("Making new message ~p", [MsgWithId]),
+    Bin = coap_message_parser:encode(MsgWithId),
+    {ok, SentState} = send(Bin, StateWithId),
+    {ok, SentState}.
 
 send(Data, State=#state{socket=Socket, transport=Transport}) ->
     {ok, OutgoingCipher, NewState} = encrypt_aes(Data, State),
@@ -213,18 +220,17 @@ encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
     NewState=State#state{outgoing_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
     {ok, EncryptedBin, NewState}.
 
-create_hello_bin(State) ->
+send_hello_bin(State) ->
     Id = random:uniform(65536),
     Padding = <<>>,
+    StateWithId=State#state{outgoing_id=Id},
     Hello = #coap_message{type=non,
                           method='post',
-                          id=Id,
                           payload=Padding,
                           options=[{uri_path,[<<"h">>]}]},
     lager:info("Outgoing Hello ~p", [Hello]),
-    Bin = coap_message_parser:encode(Hello),
-    NewState = State#state{outgoing_id=Id},
-    {ok, Bin, NewState}.
+    {ok, NewState} = send_coap(Hello, StateWithId),
+    {ok, NewState}.
 
 
 communicating({tcp, Data}, State) ->
@@ -244,6 +250,12 @@ communicating(Event, State) ->
 handle_coap(Msg=#coap_message{options=[{uri_path,[<<"t">>]}]}, State) ->
     lager:info("Client is asking for the time, ~p", [Msg]),
     State;
+
+handle_coap(Msg=#coap_message{type=con, method=undefined}, State=#state{}) ->
+    lager:info("Client is pinging, I should send one back! ~p", [Msg]),
+    PingAck = #coap_message{type=ack, method=undefined},
+    {ok, NewState} = send_coap(PingAck, State),
+    NewState;
 
 handle_coap(Msg, State) ->
     lager:info("Unhandled coap message ~p", [Msg]),
