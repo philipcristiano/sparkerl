@@ -249,9 +249,6 @@ communicating(Event, State) ->
     lager:info("Unhandled Communicating Event ~p", [Event]),
     {next_state, communicating, State}.
 
-handle_coap(Msg=#coap_message{options=[{uri_path,[<<"t">>]}]}, State) ->
-    lager:info("Client is asking for the time, ~p", [Msg]),
-    State;
 
 handle_coap(Msg=#coap_message{type=con, method=undefined}, State=#state{}) ->
     lager:info("Client is pinging, I should send one back! ~p", [Msg]),
@@ -259,6 +256,17 @@ handle_coap(Msg=#coap_message{type=con, method=undefined}, State=#state{}) ->
     {ok, NewState} = send_coap(PingAck, State),
     NewState;
 
+handle_coap(Msg=#coap_message{id=Id, token=Token, options=[{uri_path,[<<"t">>]}]}, State) ->
+    lager:info("Client is asking for the time, ~p", [Msg]),
+    Time = timestamp(),
+    Payload = <<Time:32>>,
+    TimeResponse = #coap_message{type=ack,
+                                 method={ok, content},
+                                 id=Id,
+                                 token=Token,
+                                 payload=Payload},
+    {ok, NewState} = send_coap(TimeResponse, State),
+    NewState;
 handle_coap(Msg, State) ->
     lager:info("Unhandled coap message ~p", [Msg]),
     State.
@@ -391,3 +399,8 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+timestamp() ->
+    {Mega, Sec, Micro} = erlang:now(),
+    Timestamp = Mega * 1000000 * 1000000 + Sec * 1000000 + Micro.
