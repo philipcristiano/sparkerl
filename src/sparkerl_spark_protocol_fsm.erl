@@ -183,13 +183,15 @@ parse_hello_payload(<<ProductId:16, FirmwareVersion:16, Flags:8, NewlyUpgraded:8
     lager:info("PlatformId ~p", [PlatformId]),
     ok.
 
-send_coap(Msg=#coap_message{}, State=#state{outgoing_id=OutgoingId}) ->
+send_coap(Msg=#coap_message{id=undefined}, State=#state{outgoing_id=OutgoingId}) ->
     NewId = OutgoingId + 1,
     MsgWithId = Msg#coap_message{id=NewId},
     StateWithId = State#state{outgoing_id=OutgoingId},
-    lager:info("Making new message ~p", [MsgWithId]),
-    Bin = coap_message_parser:encode(MsgWithId),
-    {ok, SentState} = send(Bin, StateWithId),
+    send_coap(MsgWithId, StateWithId);
+send_coap(Msg=#coap_message{}, State=#state{}) ->
+    lager:info("Making new message ~p", [Msg]),
+    Bin = coap_message_parser:encode(Msg),
+    {ok, SentState} = send(Bin, State),
     {ok, SentState}.
 
 send(Data, State=#state{socket=Socket, transport=Transport}) ->
