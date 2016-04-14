@@ -32,7 +32,8 @@
                 incoming_iv,
                 outgoing_id,
                 aes_key,
-                aes_salt}).
+                aes_salt,
+                handler_pid}).
 
 %%%===================================================================
 %%% API
@@ -72,6 +73,7 @@ init([]) ->
     ok.
 
 init(Ref, Socket, Transport, _Opts = []) ->
+    {ok, HandlerPid} = sparkerl_handler_server:start_link(),
     ok = proc_lib:init_ack({ok, self()}),
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(Ref),
@@ -89,7 +91,8 @@ init(Ref, Socket, Transport, _Opts = []) ->
     State = #state{socket=Socket,
                    transport=Transport,
                    private_key=PK,
-                   nonce=Nonce},
+                   nonce=Nonce,
+                   handler_pid=HandlerPid},
 
     gen_fsm:enter_loop(?MODULE, [], validate_nonce, State).
 
@@ -249,6 +252,7 @@ communicating(Event, State) ->
     lager:info("Unhandled Communicating Event ~p", [Event]),
     {next_state, communicating, State}.
 
+%% Do something meaningful with the client messages!
 
 handle_coap(Msg=#coap_message{type=con, method=undefined}, State=#state{}) ->
     lager:info("Client is pinging, I should send one back! ~p", [Msg]),
@@ -267,6 +271,12 @@ handle_coap(Msg=#coap_message{id=Id, token=Token, options=[{uri_path,[<<"t">>]}]
                                  payload=Payload},
     {ok, NewState} = send_coap(TimeResponse, State),
     NewState;
+handle_coap(Msg=#coap_message{type=con}, State=#state{handler_pid=HandlerPid}) ->
+    {ok, Resp} = gen_server:call(HandlerPid, {coap, Msg}),
+    State;
+handle_coap(Msg=#coap_message{type=non}, State=#state{handler_pid=HandlerPid}) ->
+    ok = gen_server:cast(HandlerPid, {coap, Msg}),
+    State;
 handle_coap(Msg, State) ->
     lager:info("Unhandled coap message ~p", [Msg]),
     State.
