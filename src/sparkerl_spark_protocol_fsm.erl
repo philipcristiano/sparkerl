@@ -244,7 +244,7 @@ communicating({tcp, Data}, State) ->
     {ok, PlainText, NewState} = decrypt_aes(Data, State),
     lager:debug("Plain text: ~p", [PlainText]),
     Msg = coap_message_parser:decode(PlainText),
-    lager:info("Received coap ~p", [Msg]),
+    lager:debug("Received coap ~p", [Msg]),
     NewState2 = handle_coap(Msg, NewState),
     {next_state, communicating, NewState2};
 
@@ -255,7 +255,7 @@ communicating(Event, State) ->
 %% Do something meaningful with the client messages!
 
 handle_coap(Msg=#coap_message{type=con, method=undefined}, State=#state{}) ->
-    lager:info("Client is pinging, I should send one back! ~p", [Msg]),
+    lager:debug("Client is pinging, I should send one back! ~p", [Msg]),
     PingAck = #coap_message{type=ack, method=undefined},
     {ok, NewState} = send_coap(PingAck, State),
     NewState;
