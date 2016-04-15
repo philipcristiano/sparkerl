@@ -412,5 +412,5 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 
 timestamp() ->
-    {Mega, Sec, Micro} = erlang:now(),
-    Timestamp = Mega * 1000000 * 1000000 + Sec * 1000000 + Micro.
+    {Mega, Sec, _Micro} = os:timestamp(),
+    Timestamp = Mega * 1000000 + Sec.
