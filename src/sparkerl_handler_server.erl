@@ -58,7 +58,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     lager:debug("Starting sparkel handler server"),
-    HandlerMod = sparkerl_handler,
+    HandlerMod = application:get_env(sparkerl, protocol_handler, sparkerl_handler),
     {ok, HandlerState} = HandlerMod:init(),
     {ok, #state{handler_mod=HandlerMod, handler_state=HandlerState}}.
 
