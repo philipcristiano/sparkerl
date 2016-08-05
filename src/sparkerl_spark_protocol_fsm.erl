@@ -207,7 +207,7 @@ send(Data, State=#state{socket=Socket, transport=Transport}) ->
 decrypt_aes(EncryptedBin, State=#state{aes_key=Key, incoming_iv=IV}) ->
     lager:debug("Decrypting ~p", [EncryptedBin]),
     lager:debug("Decrypting with IV ~p", [IV]),
-    PlainBin = crypto:block_decrypt(aes_cbc256, Key, IV, EncryptedBin),
+    PlainBin = crypto:block_decrypt(aes_cbc, Key, IV, EncryptedBin),
     NewState=State#state{incoming_iv=next_iv(EncryptedBin)},
     lager:debug("Next decrypt with IV ~p", [NewState#state.incoming_iv]),
     UnpaddedBin = pkcs7:unpad(PlainBin),
@@ -221,7 +221,7 @@ encrypt_aes(PlainBin, State=#state{aes_key=Key, outgoing_iv=IV}) ->
     PaddedBin = pkcs7:pad(PlainBin),
     lager:debug("padded to ~p", [PaddedBin]),
 
-    EncryptedBin = crypto:block_encrypt(aes_cbc256, Key, IV, PaddedBin),
+    EncryptedBin = crypto:block_encrypt(aes_cbc, Key, IV, PaddedBin),
     NewState=State#state{outgoing_iv=crypto:next_iv(aes_cbc, EncryptedBin)},
     {ok, EncryptedBin, NewState}.
 
