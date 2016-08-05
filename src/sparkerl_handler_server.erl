@@ -59,6 +59,7 @@ start_link() ->
 init([]) ->
     lager:debug("Starting sparkel handler server"),
     HandlerMod = application:get_env(sparkerl, protocol_handler, sparkerl_handler),
+    lager:debug("Using handler ~p", [HandlerMod]),
     {ok, HandlerState} = HandlerMod:init(),
     {ok, #state{handler_mod=HandlerMod, handler_state=HandlerState}}.
 
@@ -77,7 +78,7 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(Request, _From, State) ->
-    lager:info("Unhandled sparkerl_handler call ~p", [Request]),
+    lager:debug("Unhandled sparkerl_handler call ~p", [Request]),
     Reply = {ok, none},
     {reply, Reply, State}.
 
@@ -94,7 +95,7 @@ handle_call(Request, _From, State) ->
 handle_cast({coap, #coap_message{options=[{uri_path,[<<"e">>, Name]}],
                                  payload=Data}},
             State=#state{handler_mod=HandlerMod, handler_state=HandlerState}) ->
-    lager:info("Received public event ~p ~p", [Name, Data]),
+    lager:debug("Received public event ~p ~p", [Name, Data]),
     {ok, NewHandlerState} = HandlerMod:handle_public_event(unknown,
                                                            Name,
                                                            Data,
@@ -102,7 +103,7 @@ handle_cast({coap, #coap_message{options=[{uri_path,[<<"e">>, Name]}],
     {noreply, State#state{handler_state=HandlerState}};
 
 handle_cast(Msg, State) ->
-    lager:info("Unhandled sparkerl_handler cast ~p", [Msg]),
+    lager:debug("Unhandled sparkerl_handler cast ~p", [Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

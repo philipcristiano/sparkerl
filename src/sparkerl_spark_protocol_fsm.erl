@@ -86,7 +86,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
 
     Nonce = crypto:rand_bytes(40),
     Transport:send(Socket, Nonce),
-    lager:info("Sending nonce: ~p", [Nonce]),
+    lager:debug("Sending nonce: ~p", [Nonce]),
 
     State = #state{socket=Socket,
                    transport=Transport,
@@ -166,24 +166,24 @@ validate_hello({tcp, Data}, State=#state{socket=Socket, transport=Transport}) ->
     {ok, PlainText, NewState} = decrypt_aes(CipherText, State),
     lager:debug("Hello plaintext ~p", [PlainText]),
     Hello = coap_message_parser:decode(PlainText),
-    lager:info("Hello coap ~p", [Hello]),
+    lager:debug("Hello coap ~p", [Hello]),
     parse_hello_payload(Hello#coap_message.payload),
 
-    lager:info("Responding with Hello"),
+    lager:debug("Responding with Hello"),
     {ok, NewState1} = send_hello_bin(NewState),
 
     {next_state, communicating, NewState1};
 
 validate_hello(Event, State) ->
-    lager:info("Unhandled Hello Event ~p", [Event]),
+    lager:debug("Unhandled Hello Event ~p", [Event]),
     {next_state, validate_hello, State}.
 
 parse_hello_payload(<<ProductId:16, FirmwareVersion:16, Flags:8, NewlyUpgraded:8, PlatformId:16, Rest/binary>>) ->
-    lager:info("ProductId ~p", [ProductId]),
-    lager:info("FirmwareVersion ~p", [FirmwareVersion]),
-    lager:info("Flags ~p", [Flags]),
-    lager:info("NewlyUpgraded ~p", [NewlyUpgraded]),
-    lager:info("PlatformId ~p", [PlatformId]),
+    lager:debug("ProductId ~p", [ProductId]),
+    lager:debug("FirmwareVersion ~p", [FirmwareVersion]),
+    lager:debug("Flags ~p", [Flags]),
+    lager:debug("NewlyUpgraded ~p", [NewlyUpgraded]),
+    lager:debug("PlatformId ~p", [PlatformId]),
     ok.
 
 send_coap(Msg=#coap_message{id=undefined}, State=#state{outgoing_id=OutgoingId}) ->
@@ -192,7 +192,7 @@ send_coap(Msg=#coap_message{id=undefined}, State=#state{outgoing_id=OutgoingId})
     StateWithId = State#state{outgoing_id=OutgoingId},
     send_coap(MsgWithId, StateWithId);
 send_coap(Msg=#coap_message{}, State=#state{}) ->
-    lager:info("Making new message ~p", [Msg]),
+    lager:debug("Making new message ~p", [Msg]),
     Bin = coap_message_parser:encode(Msg),
     {ok, SentState} = send(Bin, State),
     {ok, SentState}.
@@ -233,7 +233,7 @@ send_hello_bin(State) ->
                           method='post',
                           payload=Padding,
                           options=[{uri_path,[<<"h">>]}]},
-    lager:info("Outgoing Hello ~p", [Hello]),
+    lager:debug("Outgoing Hello ~p", [Hello]),
     {ok, NewState} = send_coap(Hello, StateWithId),
     {ok, NewState}.
 
@@ -261,7 +261,7 @@ handle_coap(Msg=#coap_message{type=con, method=undefined}, State=#state{}) ->
     NewState;
 
 handle_coap(Msg=#coap_message{id=Id, token=Token, options=[{uri_path,[<<"t">>]}]}, State) ->
-    lager:info("Client is asking for the time, ~p", [Msg]),
+    lager:debug("Client is asking for the time, ~p", [Msg]),
     Time = timestamp(),
     Payload = <<Time:32>>,
     TimeResponse = #coap_message{type=ack,
