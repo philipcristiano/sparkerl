@@ -14,7 +14,8 @@
 -include_lib("gen_coap/include/coap.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/0,
+         stop/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -31,6 +32,9 @@
 %%% API
 %%%===================================================================
 
+stop(Pid) ->
+    gen_server:cast(Pid, stop).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
@@ -39,6 +43,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
+    lager:info("Linking from ~p", [self()]),
     gen_server:start_link(?MODULE, [], []).
 
 %%%===================================================================
@@ -102,6 +107,8 @@ handle_cast({coap, #coap_message{options=[{uri_path,[<<"e">>, Name]}],
                                                            HandlerState),
     {noreply, State#state{handler_state=HandlerState}};
 
+handle_cast(stop, State) ->
+    {stop, normal, State};
 handle_cast(Msg, State) ->
     lager:debug("Unhandled sparkerl_handler cast ~p", [Msg]),
     {noreply, State}.
@@ -131,6 +138,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
+    lager:info("Closing handler server"),
     ok.
 
 %%--------------------------------------------------------------------

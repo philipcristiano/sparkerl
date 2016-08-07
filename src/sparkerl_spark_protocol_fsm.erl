@@ -33,7 +33,8 @@
                 outgoing_id,
                 aes_key,
                 aes_salt,
-                handler_pid}).
+                handler_pid,
+                timer_heard=false}).
 
 %%%===================================================================
 %%% API
@@ -128,6 +129,9 @@ validate_nonce({tcp, Data}, State=#state{private_key=PK, nonce=Nonce, socket=Soc
 
     {ok, HandlerPid} = sparkerl_handler_server:start_link(),
     HandlerState = NewState#state{handler_pid=HandlerPid},
+
+    % Handle timeouts if we don't hear a ping
+    timer:send_interval(15000, {timer}),
     {next_state, validate_hello, HandlerState};
 
 validate_nonce(Event, State) ->
@@ -246,7 +250,8 @@ communicating({tcp, Data}, State) ->
     Msg = coap_message_parser:decode(PlainText),
     lager:debug("Received coap ~p", [Msg]),
     NewState2 = handle_coap(Msg, NewState),
-    {next_state, communicating, NewState2};
+    TimerResetState = NewState2#state{timer_heard=false},
+    {next_state, communicating, TimerResetState};
 
 communicating(Event, State) ->
     lager:info("Unhandled Communicating Event ~p", [Event]),
@@ -366,6 +371,22 @@ handle_info({tcp, Port, IncommingData}, communicating, State=#state{recv_buffer=
 handle_info({tcp, Port, Data}, StateName, State) ->
     ok = gen_fsm:send_event(self(), {tcp, Data}),
     {next_state, StateName, State};
+
+handle_info({tcp_closed, Socket}, StateName, State=#state{handler_pid=Handler}) ->
+    lager:info("Socket closed, ~p", [Socket]),
+    ok = sparkerl_handler_server:stop(Handler),
+    {stop, socket_closed, State};
+
+handle_info({timer}, StateName, State=#state{timer_heard=true,
+                                             handler_pid=Handler}) ->
+
+    lager:info("Haven't heard from the client, closing!"),
+    ok = sparkerl_handler_server:stop(Handler),
+    {stop, normal, State};
+
+handle_info({timer}, StateName, State=#state{timer_heard=false}) ->
+    lager:debug("Heard timer, last value false"),
+    {next_state, StateName, State#state{timer_heard=true}};
 
 handle_info(Info, StateName, State) ->
     lager:info("Info ~p", [Info]),
