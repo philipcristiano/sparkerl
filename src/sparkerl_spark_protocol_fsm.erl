@@ -73,7 +73,6 @@ init([]) ->
     ok.
 
 init(Ref, Socket, Transport, _Opts = []) ->
-    {ok, HandlerPid} = sparkerl_handler_server:start_link(),
     ok = proc_lib:init_ack({ok, self()}),
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(Ref),
@@ -91,8 +90,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
     State = #state{socket=Socket,
                    transport=Transport,
                    private_key=PK,
-                   nonce=Nonce,
-                   handler_pid=HandlerPid},
+                   nonce=Nonce},
 
     gen_fsm:enter_loop(?MODULE, [], validate_nonce, State).
 
@@ -128,7 +126,9 @@ validate_nonce({tcp, Data}, State=#state{private_key=PK, nonce=Nonce, socket=Soc
     Transport:send(Socket, Msg),
     ok = Transport:setopts(Socket, [{active, once}]),
 
-    {next_state, validate_hello, NewState};
+    {ok, HandlerPid} = sparkerl_handler_server:start_link(),
+    HandlerState = NewState#state{handler_pid=HandlerPid},
+    {next_state, validate_hello, HandlerState};
 
 validate_nonce(Event, State) ->
     lager:info("Unknown Event ~p", [Event]),
